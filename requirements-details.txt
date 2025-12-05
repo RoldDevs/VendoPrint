@@ -1,0 +1,7 @@
+Flask — Web framework for the application
+Werkzeug — WSGI utilities (used by Flask)
+Pillow — Image processing for photo previews
+PyMuPDF — PDF processing for page counting and previews
+python-docx — Word document processing
+RPi.GPIO — Raspberry Pi GPIO control for coin slot
+requests — HTTP library for error notifications

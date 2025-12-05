@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VendoPrint - Automated Printing System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>VendoPrint</h1>
+            <p class="subtitle">Automated Printing System</p>
+        </div>
+        
+        <div class="main-menu">
+            <a href="/print-photo" class="menu-card">
+                <div class="card-icon">📷</div>
+                <h2>Print Photo</h2>
+                <p>Print your photos</p>
+            </a>
+            
+            <a href="/print-document" class="menu-card">
+                <div class="card-icon">📄</div>
+                <h2>Print Document</h2>
+                <p>Print your documents</p>
+            </a>
+        </div>
+        
+        <div class="footer">
+            <a href="/api/dashboard" class="admin-link">Owner Dashboard</a>
+        </div>
+    </div>
+</body>
+</html>

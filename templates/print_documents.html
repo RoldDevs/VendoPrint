@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Print Documents - VendoPrint{% endblock %}
+
+{% block content %}
+<div class="print-container">
+    <div class="header-bar">
+        <a href="/" class="back-btn">← Back</a>
+        <h1>Print Documents</h1>
+    </div>
+    
+    <div class="print-wizard">
+        <!-- Step 1: Upload -->
+        <div id="step-upload" class="step active">
+            <div class="upload-area" id="uploadArea">
+                <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.txt" style="display: none;">
+                <div class="upload-content">
+                    <div class="upload-icon">📄</div>
+                    <h3>Select Document to Print</h3>
+                    <p>Click or drag and drop your document here</p>
+                    <button class="btn-primary" onclick="document.getElementById('fileInput').click()">
+                        Choose File
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Step 2: Preview & Details -->
+        <div id="step-details" class="step">
+            <div class="preview-section">
+                <h2>Preview</h2>
+                <div class="preview-container">
+                    <iframe id="documentPreview" src="" style="display: none;"></iframe>
+                    <div id="previewPlaceholder" class="preview-placeholder">
+                        <p>Document Preview</p>
+                        <p id="pageCount">Pages: 0</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="details-panel">
+                <h2>Printing Details</h2>
+                
+                <div class="detail-group">
+                    <label>Number of Copies</label>
+                    <input type="number" id="copies" min="1" value="1" class="input-field">
+                </div>
+                
+                <div class="detail-group">
+                    <label>Printing Range</label>
+                    <select id="printRange" class="input-field">
+                        <option value="all">Print All</option>
+                        <option value="range">Specific Pages</option>
+                    </select>
+                </div>
+                
+                <div class="detail-group" id="pageRangeGroup" style="display: none;">
+                    <label>Page Range</label>
+                    <div class="range-inputs">
+                        <input type="number" id="startPage" min="1" placeholder="Start" class="input-field small">
+                        <span>to</span>
+                        <input type="number" id="endPage" min="1" placeholder="End" class="input-field small">
+                    </div>
+                </div>
+                
+                <div class="detail-group">
+                    <label>Orientation</label>
+                    <select id="orientation" class="input-field">
+                        <option value="portrait">Portrait</option>
+                        <option value="landscape">Landscape</option>
+                    </select>
+                </div>
+                
+                <div class="detail-group">
+                    <label>Color Mode</label>
+                    <select id="colorMode" class="input-field">
+                        <option value="grayscale">Grayscale</option>
+                        <option value="color">Color</option>
+                    </select>
+                </div>
+                
+                <div class="cost-display">
+                    <div class="cost-item">
+                        <span>Price per page:</span>
+                        <span id="pricePerPage">₱5.00</span>
+                    </div>
+                    <div class="cost-item">
+                        <span>Total pages:</span>
+                        <span id="totalPages">1</span>
+                    </div>
+                    <div class="cost-item total">
+                        <span>Total Cost:</span>
+                        <span id="totalCost">₱5.00</span>
+                    </div>
+                </div>
+                
+                <button class="btn-primary btn-large" id="proceedToPayment">
+                    Proceed to Payment
+                </button>
+            </div>
+        </div>
+        
+        <!-- Step 3: Payment -->
+        <div id="step-payment" class="step">
+            <div class="payment-section">
+                <h2>Payment</h2>
+                <div class="payment-info">
+                    <div class="payment-amount">
+                        <p class="label">Amount Required:</p>
+                        <p class="amount" id="requiredAmount">₱5.00</p>
+                    </div>
+                    <div class="payment-progress">
+                        <p class="label">Amount Paid:</p>
+                        <p class="amount paid" id="paidAmount">₱0.00</p>
+                    </div>
+                    <div class="payment-remaining">
+                        <p class="label">Remaining:</p>
+                        <p class="amount" id="remainingAmount">₱5.00</p>
+                    </div>
+                </div>
+                
+                <div class="coin-instruction">
+                    <p>1 PAGE = 5 PESOS</p>
+                    <p class="instruction">YOU MAY NOW INSERT YOUR COIN</p>
+                </div>
+                
+                <div class="coin-slot-simulator">
+                    <button class="coin-btn" id="insertCoinBtn">Insert ₱1 Coin</button>
+                </div>
+                
+                <button class="btn-primary btn-large btn-disabled" id="printBtn" disabled>
+                    Print Document
+                </button>
+            </div>
+        </div>
+        
+        <!-- Step 4: Printing -->
+        <div id="step-printing" class="step">
+            <div class="printing-section">
+                <h2>Your Document is Now Printing</h2>
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <p class="progress-text" id="progressText">1/1 PAGES</p>
+                </div>
+                <div class="printing-animation">🖨️</div>
+            </div>
+        </div>
+        
+        <!-- Step 5: Complete -->
+        <div id="step-complete" class="step">
+            <div class="complete-section">
+                <div class="success-icon">✅</div>
+                <h2>Your Document is Now Ready</h2>
+                <p>Please collect your printed document from the output tray.</p>
+                <button class="btn-primary" onclick="location.reload()">
+                    Print Another
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/print_documents.js') }}"></script>
+{% endblock %}
+

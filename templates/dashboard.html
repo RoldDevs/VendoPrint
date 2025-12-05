@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Owner Dashboard - VendoPrint</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="dashboard-header">
+            <h1>Owner Dashboard</h1>
+            <a href="/" class="back-btn">← Back to Main</a>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Total Prints</h3>
+                <p class="stat-value" id="totalPrints">0</p>
+            </div>
+            
+            <div class="stat-card">
+                <h3>Today's Prints</h3>
+                <p class="stat-value" id="todayPrints">0</p>
+            </div>
+            
+            <div class="stat-card">
+                <h3>Total Revenue</h3>
+                <p class="stat-value" id="totalRevenue">₱0.00</p>
+            </div>
+            
+            <div class="stat-card">
+                <h3>Success Rate</h3>
+                <p class="stat-value" id="successRate">0%</p>
+            </div>
+            
+            <div class="stat-card error-card">
+                <h3>Unresolved Errors</h3>
+                <p class="stat-value" id="unresolvedErrors">0</p>
+            </div>
+        </div>
+        
+        <div class="logs-section">
+            <h2>Recent Activity Logs</h2>
+            <div class="logs-table-container">
+                <table class="logs-table">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>File Type</th>
+                            <th>File Name</th>
+                            <th>Pages</th>
+                            <th>Copies</th>
+                            <th>Color Mode</th>
+                            <th>Cost</th>
+                            <th>Status</th>
+                            <th>Error</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsTableBody">
+                        <tr>
+                            <td colspan="9">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="printer-status-section">
+            <h2>Printer Status</h2>
+            <div class="status-card">
+                <div class="status-item">
+                    <span class="status-label">Printer Name:</span>
+                    <span id="printerName">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">State:</span>
+                    <span id="printerState">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Paper Status:</span>
+                    <span id="paperStatus">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Ink Status:</span>
+                    <span id="inkStatus">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Error Status:</span>
+                    <span id="errorStatus">-</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
