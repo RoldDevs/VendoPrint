@@ -1,10 +1,13 @@
 {
     "PRICE_PER_PAGE_BW": 5.0,
     "PRICE_PER_PAGE_COLOR": 10.0,
-    "PRINTER_NAME": "Brother",
+    "PRINTER_NAME": "DCP-T700W",
     "COIN_VALUES": [1, 5, 10, 20],
     "COIN_SLOT_GPIO_PIN": 18,
     "notification_url": null,
-    "owner_phone": null
+    "owner_phone": null,
+    "CAPTIVE_PORTAL_ENABLED": true,
+    "WIFI_SSID": "VendoPrint",
+    "REDIRECT_TO_PORTAL": true
 }
 

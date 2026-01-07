@@ -85,6 +85,23 @@ def index():
     """Main page - choose between Print Photo or Print Document"""
     return render_template('index.html')
 
+# Captive Portal Detection Routes
+@app.route('/generate_204')
+@app.route('/gen_204')
+@app.route('/hotspot-detect.html')
+@app.route('/connectivity-check.html')
+@app.route('/check_network_status.txt')
+@app.route('/ncsi.txt')
+@app.route('/success.txt')
+def captive_portal_detection():
+    """Handle captive portal detection from various devices"""
+    return render_template('index.html')
+
+@app.route('/redirect')
+def captive_redirect():
+    """Redirect page for captive portal"""
+    return render_template('index.html')
+
 @app.route('/print-photo')
 def print_photo():
     """Print Photo interface"""
@@ -98,6 +115,7 @@ def print_document():
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
     """Handle file upload"""
+    global current_job
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file provided'}), 400
@@ -129,7 +147,6 @@ def upload_file():
             session['pages'] = pages
             
             # Reset current job
-            global current_job
             current_job = {
                 'file_path': file_path,
                 'file_type': file_type,
@@ -168,6 +185,7 @@ def get_preview():
 @app.route('/api/calculate-cost', methods=['POST'])
 def calculate_cost():
     """Calculate printing cost based on settings"""
+    global current_job
     try:
         data = request.json
         pages = data.get('pages', current_job['pages'])
@@ -188,7 +206,6 @@ def calculate_cost():
         total_cost = actual_pages * price_per_page
         
         # Update current job
-        global current_job
         current_job['copies'] = copies
         current_job['page_range'] = page_range
         current_job['orientation'] = data.get('orientation', 'portrait')
@@ -220,6 +237,7 @@ def payment_status():
 @app.route('/api/coin-inserted', methods=['POST'])
 def coin_inserted():
     """Handle coin insertion from coin slot"""
+    global current_job
     try:
         data = request.json
         coin_value = float(data.get('value', 0))
@@ -227,7 +245,6 @@ def coin_inserted():
         if coin_value not in CONFIG['COIN_VALUES']:
             return jsonify({'error': 'Invalid coin value'}), 400
         
-        global current_job
         current_job['paid'] += coin_value
         
         # Log payment
@@ -253,9 +270,8 @@ def coin_inserted():
 @app.route('/api/start-print', methods=['POST'])
 def start_print():
     """Start printing process"""
+    global current_job
     try:
-        global current_job
-        
         if current_job['paid'] < current_job['cost']:
             return jsonify({'error': 'Insufficient payment'}), 400
         

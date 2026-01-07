@@ -2,6 +2,28 @@
 
 An automated printing system for Raspberry Pi 5 that allows students to print documents and photos via Wi-Fi using a coin-based payment system.
 
+## Getting Started with Raspberry Pi 5
+
+### **NEW: Complete Documentation Available!**
+
+**Having trouble identifying variables or configuring hardware?**
+
+**Start here:** [START_HERE.md](START_HERE.md) - Your complete guide to setup and configuration
+
+### Quick Links to Documentation:
+
+| Problem | Solution |
+|---------|----------|
+| **Installation error** | [FIX_INSTALLATION.md](FIX_INSTALLATION.md) - Fix "KeyError: '_version_'" |
+| **Configure variables** | [SETUP.md](SETUP.md) - Complete variable guide |
+| **Quick commands** | [QUICK_REFERENCE.md](QUICK_REFERENCE.md) - Essential commands |
+| **Visual diagrams** | [VARIABLE_FLOW_DIAGRAM.md](VARIABLE_FLOW_DIAGRAM.md) - How it works |
+| **Hardware wiring** | [WIRING_DIAGRAM.md](WIRING_DIAGRAM.md) - Connection guide |
+| **Raspberry Pi setup** | [RASPBERRY_PI_SETUP.md](RASPBERRY_PI_SETUP.md) - Complete Pi setup |
+| **All documentation** | [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) - Full index |
+
+**New to this project?** Read [START_HERE.md](START_HERE.md) first!
+
 ## Features
 
 - **Web-based Interface**: Upload and print documents/photos via Wi-Fi
@@ -153,16 +175,36 @@ Edit `config.json` to customize:
 
 ## Troubleshooting
 
+### 🔴 Installation Error: "KeyError: '_version_'"
+**Quick Fix:**
+```bash
+sudo apt-get install -y python3-rpi.gpio
+cd ~/VendoPrint
+rm -rf env
+python3 -m venv env --system-site-packages
+source env/bin/activate
+pip install flask werkzeug python-docx pillow PyPDF2
+```
+**Detailed guide:** [FIX_INSTALLATION.md](FIX_INSTALLATION.md)
+
 ### Printer not found
 - Check printer is connected and powered on
 - Verify printer name in CUPS: `lpstat -p`
 - Update `PRINTER_NAME` in `config.json`
+- **Detailed guide:** [SETUP.md](SETUP.md) - Printer section
 
 ### Coin slot not working
-- Verify GPIO pin connection
-- Check coin slot power supply
-- Review coin slot documentation for pulse patterns
-- Update `_determine_coin_value()` in `payment_system.py` to match your coin slot
+- Verify GPIO pin connection (Pin 12 = GPIO 18)
+- Check coin slot power supply (12V)
+- Check ground connection (Pin 6)
+- Update `COIN_SLOT_GPIO_PIN` in `config.json`
+- **Detailed guide:** [SETUP.md](SETUP.md) - Coin slot section
+- **Wiring guide:** [WIRING_DIAGRAM.md](WIRING_DIAGRAM.md)
+
+### Variables not configured
+- Don't know which variables to edit? → [SETUP.md](SETUP.md)
+- Need visual understanding? → [VARIABLE_FLOW_DIAGRAM.md](VARIABLE_FLOW_DIAGRAM.md)
+- Need quick reference? → [QUICK_REFERENCE.md](QUICK_REFERENCE.md)
 
 ### File upload fails
 - Check file size (max 50MB)
@@ -173,6 +215,9 @@ Edit `config.json` to customize:
 - Install audio system: `sudo apt-get install alsa-utils beep`
 - Check audio output is configured
 - Audio will fail silently if not available (non-critical)
+
+### Need More Help?
+See [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) for complete troubleshooting guides.
 
 ## License
 

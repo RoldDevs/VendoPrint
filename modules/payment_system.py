@@ -22,6 +22,7 @@ class PaymentSystem:
         self.pulse_timeout = 0.5  # 500ms timeout between pulses
         self.initialized = False
         self.callback = None
+        self._timer = None
     
     def initialize(self):
         """Initialize GPIO for coin slot"""
@@ -43,7 +44,13 @@ class PaymentSystem:
         current_time = time.time()
         
         if current_time - self.last_pulse_time > self.pulse_timeout:
-            # New coin sequence
+            # New coin sequence - process previous coin if any
+            if self.pulse_count > 0:
+                coin_value = self._determine_coin_value()
+                if coin_value > 0 and self.callback:
+                    logging.info(f"Coin detected: {self.pulse_count} pulses = ₱{coin_value}")
+                    self.callback(coin_value)
+            # Reset for new coin
             self.pulse_count = 1
         else:
             # Continuation of same coin
@@ -51,12 +58,20 @@ class PaymentSystem:
         
         self.last_pulse_time = current_time
         
-        # Determine coin value based on pulse count
-        # This is a simplified version - actual implementation depends on coin slot model
-        coin_value = self._determine_coin_value()
-        
-        if coin_value > 0 and self.callback:
-            self.callback(coin_value)
+        # Start a timer to process the coin after timeout
+        if hasattr(self, '_timer') and self._timer:
+            self._timer.cancel()
+        self._timer = threading.Timer(self.pulse_timeout + 0.1, self._process_coin)
+        self._timer.start()
+    
+    def _process_coin(self):
+        """Process the completed coin after timeout"""
+        if self.pulse_count > 0:
+            coin_value = self._determine_coin_value()
+            if coin_value > 0 and self.callback:
+                logging.info(f"Processing coin: {self.pulse_count} pulses = ₱{coin_value}")
+                self.callback(coin_value)
+            self.pulse_count = 0
     
     def _determine_coin_value(self):
         """Determine coin value from pulse pattern"""
