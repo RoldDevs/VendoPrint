@@ -191,3 +191,38 @@ function showCompletion() {
     document.getElementById('completeSection').style.display = 'block';
 }
 
+// Test coin insertion function (for testing without hardware)
+async function testCoinInsert(value) {
+    try {
+        const response = await fetch('/api/coin-inserted', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ value: value })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            paidAmount = data.paid;
+            updatePaymentUI();
+            document.getElementById('printBtn').disabled = !data.can_print;
+            
+            // Show feedback
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = '✓ Inserted!';
+            btn.style.background = '#45a049';
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.style.background = '#4CAF50';
+            }, 1000);
+        } else {
+            alert('Error: ' + (data.error || 'Failed to insert coin'));
+        }
+    } catch (error) {
+        console.error('Coin insertion error:', error);
+        alert('Error inserting coin. Please check connection.');
+    }
+}

@@ -74,7 +74,8 @@ if os.path.exists('config.json'):
 
 # Initialize modules with config
 file_processor = FileProcessor()
-payment_system = PaymentSystem()
+coin_slot_pin = CONFIG.get('COIN_SLOT_GPIO_PIN', 18)
+payment_system = PaymentSystem(coin_slot_pin=coin_slot_pin)
 printer_manager = PrinterManager(CONFIG.get('PRINTER_NAME', 'Brother'))
 logging_system = LoggingSystem()
 error_handler = ErrorHandler()
@@ -88,6 +89,10 @@ def index():
 # Captive Portal Detection Routes
 @app.route('/generate_204')
 @app.route('/gen_204')
+def generate_204():
+    """Android captive portal detection - returns 204 No Content"""
+    return '', 204
+
 @app.route('/hotspot-detect.html')
 @app.route('/connectivity-check.html')
 @app.route('/check_network_status.txt')
@@ -95,7 +100,20 @@ def index():
 @app.route('/success.txt')
 def captive_portal_detection():
     """Handle captive portal detection from various devices"""
-    return render_template('index.html')
+    # Return a simple HTML page that redirects
+    return '''<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="refresh" content="0; url=/">
+    <title>VendoPrint - WiFi Portal</title>
+</head>
+<body>
+    <script>window.location.href = "/";</script>
+    <p>Redirecting to VendoPrint... <a href="/">Click here</a></p>
+</body>
+</html>'''
 
 @app.route('/redirect')
 def captive_redirect():
@@ -236,14 +254,18 @@ def payment_status():
 
 @app.route('/api/coin-inserted', methods=['POST'])
 def coin_inserted():
-    """Handle coin insertion from coin slot"""
+    """Handle coin insertion from coin slot (manual/test endpoint)"""
     global current_job
     try:
-        data = request.json
+        data = request.json or {}
         coin_value = float(data.get('value', 0))
         
-        if coin_value not in CONFIG['COIN_VALUES']:
+        if coin_value <= 0:
             return jsonify({'error': 'Invalid coin value'}), 400
+        
+        # Accept any positive value (for testing), but prefer configured values
+        if coin_value not in CONFIG.get('COIN_VALUES', [1, 5, 10, 20]):
+            logging.warning(f"Coin value {coin_value} not in configured values, accepting anyway")
         
         current_job['paid'] += coin_value
         
@@ -251,9 +273,14 @@ def coin_inserted():
         logging_system.log_payment(coin_value, current_job['paid'], current_job['cost'])
         
         # Play coin sound
-        audio_feedback.play_coin_sound()
+        try:
+            audio_feedback.play_coin_sound()
+        except:
+            pass  # Audio is optional
         
         can_print = current_job['paid'] >= current_job['cost']
+        
+        logging.info(f"Manual coin insertion: ₱{coin_value}, Total: ₱{current_job['paid']}, Cost: ₱{current_job['cost']}")
         
         return jsonify({
             'success': True,
@@ -401,11 +428,19 @@ def print_job_thread(job):
 def coin_inserted_callback(coin_value):
     """Callback function for coin slot - updates payment"""
     global current_job
-    if current_job['status'] in ['uploaded', 'idle']:
+    try:
+        # Accept coins in any state (uploaded, idle, or even during printing for refunds)
         current_job['paid'] += coin_value
         logging_system.log_payment(coin_value, current_job['paid'], current_job['cost'])
-        audio_feedback.play_coin_sound()
-        logging.info(f"Coin inserted: ₱{coin_value}, Total paid: ₱{current_job['paid']}")
+        
+        try:
+            audio_feedback.play_coin_sound()
+        except:
+            pass  # Audio is optional
+        
+        logging.info(f"Coin inserted via GPIO: ₱{coin_value}, Total paid: ₱{current_job['paid']}, Cost: ₱{current_job['cost']}")
+    except Exception as e:
+        logging.error(f"Error in coin_inserted_callback: {e}")
 
 def allowed_file(filename):
     """Check if file extension is allowed"""
@@ -430,6 +465,25 @@ if __name__ == '__main__':
     printer_manager.initialize()
     error_handler.initialize()
     
+    # Start HTTP redirect server on port 80 (in background thread)
+    # Note: This requires root privileges. If it fails, run separately with sudo
+    try:
+        import sys
+        import os
+        # Import the redirect server module
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from http_redirect_server import run_redirect_server
+        redirect_thread = threading.Thread(target=run_redirect_server, daemon=True)
+        redirect_thread.start()
+        logging.info("HTTP redirect server started on port 80")
+    except PermissionError:
+        logging.warning("Could not start HTTP redirect server on port 80 (requires root)")
+        logging.info("Run 'sudo python3 http_redirect_server.py' separately, or use iptables redirect")
+    except Exception as e:
+        logging.warning(f"Could not start HTTP redirect server on port 80: {e}")
+        logging.info("You may need to run 'sudo python3 http_redirect_server.py' separately")
+    
     # Start Flask app
-    logging.info("Starting Flask server...")
+    logging.info("Starting Flask server on http://0.0.0.0:5000")
+    logging.info("Access the portal via WiFi connection or http://192.168.4.1:5000")
     app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)

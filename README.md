@@ -175,7 +175,7 @@ Edit `config.json` to customize:
 
 ## Troubleshooting
 
-### 🔴 Installation Error: "KeyError: '_version_'"
+### Installation Error: "KeyError: '_version_'"
 **Quick Fix:**
 ```bash
 sudo apt-get install -y python3-rpi.gpio
