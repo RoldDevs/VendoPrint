@@ -34,6 +34,7 @@ async function uploadFile(file) {
         if (data.success) {
             currentFile = data.file_path;
             currentPages = data.pages;
+            paidAmount = 0; // Reset payment
             
             // Show preview
             document.getElementById('previewImage').src = `/api/preview?file_path=${encodeURIComponent(data.preview_path)}`;
@@ -103,20 +104,27 @@ function startPaymentMonitoring() {
             paidAmount = data.paid;
             updatePaymentUI();
             
-            // Enable print button if paid
-            document.getElementById('printBtn').disabled = !data.can_print;
+            // Enable print button ONLY if enough is paid AND cost is set
+            const canPrint = data.can_print && currentCost > 0 && paidAmount >= currentCost;
+            document.getElementById('printBtn').disabled = !canPrint;
         } catch (error) {
             console.error('Payment status error:', error);
+            // On error, disable print button for safety
+            document.getElementById('printBtn').disabled = true;
         }
     }, 1000);
 }
 
 function updatePaymentUI() {
     const remaining = Math.max(0, currentCost - paidAmount);
-    const progress = currentCost > 0 ? (paidAmount / currentCost) * 100 : 0;
+    const progress = currentCost > 0 ? Math.min(100, (paidAmount / currentCost) * 100) : 0;
     
     document.getElementById('paidAmount').textContent = `₱${paidAmount.toFixed(2)}`;
     document.getElementById('progressFill').style.width = `${progress}%`;
+    
+    // Update print button state based on payment
+    const canPrint = currentCost > 0 && paidAmount >= currentCost;
+    document.getElementById('printBtn').disabled = !canPrint;
 }
 
 // Print button
@@ -125,6 +133,9 @@ document.getElementById('printBtn').addEventListener('click', async () => {
         alert('Please insert more coins');
         return;
     }
+    
+    // Disable button immediately to prevent double-clicks
+    document.getElementById('printBtn').disabled = true;
     
     await startPrinting();
 });
@@ -193,6 +204,12 @@ function showCompletion() {
 
 // Test coin insertion function (for testing without hardware)
 async function testCoinInsert(value) {
+    // Validate that a file is uploaded and cost is calculated
+    if (!currentFile || currentCost <= 0) {
+        alert('Please upload a photo first');
+        return;
+    }
+    
     try {
         const response = await fetch('/api/coin-inserted', {
             method: 'POST',
@@ -202,12 +219,15 @@ async function testCoinInsert(value) {
             body: JSON.stringify({ value: value })
         });
         
+        if (!response.ok) {
+            throw new Error(`Server error: ${response.status}`);
+        }
+        
         const data = await response.json();
         
         if (data.success) {
             paidAmount = data.paid;
             updatePaymentUI();
-            document.getElementById('printBtn').disabled = !data.can_print;
             
             // Show feedback
             const btn = event.target;
@@ -220,9 +240,13 @@ async function testCoinInsert(value) {
             }, 1000);
         } else {
             alert('Error: ' + (data.error || 'Failed to insert coin'));
+            // Ensure button stays disabled on error
+            document.getElementById('printBtn').disabled = true;
         }
     } catch (error) {
         console.error('Coin insertion error:', error);
         alert('Error inserting coin. Please check connection.');
+        // Ensure button stays disabled on error
+        document.getElementById('printBtn').disabled = true;
     }
 }

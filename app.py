@@ -164,7 +164,7 @@ def upload_file():
             session['file_type'] = file_type
             session['pages'] = pages
             
-            # Reset current job
+            # Reset current job and payment state completely
             current_job = {
                 'file_path': file_path,
                 'file_type': file_type,
@@ -175,8 +175,14 @@ def upload_file():
                 'color_mode': 'grayscale',
                 'cost': 0.0,
                 'paid': 0.0,
-                'status': 'uploaded'
+                'status': 'uploaded',
+                'current_page': 0,
+                'total_pages': 0
             }
+            
+            # Also reset payment system if it exists
+            if payment_system:
+                payment_system.reset()
             
             return jsonify({
                 'success': True,
@@ -245,11 +251,19 @@ def calculate_cost():
 def payment_status():
     """Get current payment status"""
     global current_job
+    # Only allow printing if cost is set, paid amount is sufficient, and file is uploaded
+    can_print = (
+        current_job.get('cost', 0) > 0 and 
+        current_job.get('paid', 0) >= current_job.get('cost', 0) and
+        current_job.get('file_path') is not None and
+        current_job.get('status') == 'uploaded'
+    )
+    
     return jsonify({
-        'paid': current_job['paid'],
-        'cost': current_job['cost'],
-        'remaining': max(0, current_job['cost'] - current_job['paid']),
-        'can_print': current_job['paid'] >= current_job['cost']
+        'paid': current_job.get('paid', 0.0),
+        'cost': current_job.get('cost', 0.0),
+        'remaining': max(0, current_job.get('cost', 0.0) - current_job.get('paid', 0.0)),
+        'can_print': can_print
     })
 
 @app.route('/api/coin-inserted', methods=['POST'])
@@ -257,6 +271,13 @@ def coin_inserted():
     """Handle coin insertion from coin slot (manual/test endpoint)"""
     global current_job
     try:
+        # Validate that a file is uploaded and cost is set
+        if not current_job.get('file_path') or current_job.get('cost', 0) <= 0:
+            return jsonify({'error': 'Please upload a file first and ensure cost is calculated'}), 400
+        
+        if current_job.get('status') != 'uploaded':
+            return jsonify({'error': 'Cannot accept coins at this time'}), 400
+        
         data = request.json or {}
         coin_value = float(data.get('value', 0))
         
@@ -278,7 +299,12 @@ def coin_inserted():
         except:
             pass  # Audio is optional
         
-        can_print = current_job['paid'] >= current_job['cost']
+        # Only allow printing if fully paid
+        can_print = (
+            current_job['paid'] >= current_job['cost'] and 
+            current_job['cost'] > 0 and
+            current_job['status'] == 'uploaded'
+        )
         
         logging.info(f"Manual coin insertion: ₱{coin_value}, Total: ₱{current_job['paid']}, Cost: ₱{current_job['cost']}")
         
@@ -290,6 +316,9 @@ def coin_inserted():
             'can_print': can_print
         })
     
+    except ValueError as e:
+        logging.error(f"Invalid coin value: {str(e)}")
+        return jsonify({'error': 'Invalid coin value provided'}), 400
     except Exception as e:
         logging.error(f"Coin insertion error: {str(e)}")
         return jsonify({'error': str(e)}), 500
@@ -299,11 +328,20 @@ def start_print():
     """Start printing process"""
     global current_job
     try:
-        if current_job['paid'] < current_job['cost']:
+        # Validate cost is set
+        if current_job.get('cost', 0) <= 0:
+            return jsonify({'error': 'Cost not calculated'}), 400
+        
+        # Validate sufficient payment
+        if current_job.get('paid', 0) < current_job.get('cost', 0):
             return jsonify({'error': 'Insufficient payment'}), 400
         
-        if current_job['status'] != 'uploaded':
+        # Validate file and status
+        if current_job.get('status') != 'uploaded':
             return jsonify({'error': 'No file ready for printing'}), 400
+        
+        if not current_job.get('file_path'):
+            return jsonify({'error': 'No file uploaded'}), 400
         
         # Start printing in background thread
         thread = threading.Thread(target=print_job_thread, args=(current_job.copy(),))
@@ -461,7 +499,12 @@ if __name__ == '__main__':
     # Initialize systems
     logging.info("Initializing VendoPrint system...")
     payment_system.initialize()
-    payment_system.set_coin_callback(coin_inserted_callback)
+    if payment_system.initialized:
+        payment_system.set_coin_callback(coin_inserted_callback)
+        logging.info("Hardware coin slot enabled - coins will be detected automatically")
+    else:
+        logging.info("Hardware coin slot not available - using manual/test coin insertion")
+        logging.info("Users can use test buttons (₱1, ₱5, ₱10, ₱20) in the interface")
     printer_manager.initialize()
     error_handler.initialize()
     
@@ -473,15 +516,25 @@ if __name__ == '__main__':
         # Import the redirect server module
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         from http_redirect_server import run_redirect_server
-        redirect_thread = threading.Thread(target=run_redirect_server, daemon=True)
+        
+        # Wrap in a function to catch exceptions in the thread
+        def start_redirect():
+            try:
+                run_redirect_server(silent=True)
+            except (PermissionError, OSError):
+                pass  # Silently fail - main thread already logged the info
+        
+        redirect_thread = threading.Thread(target=start_redirect, daemon=True)
         redirect_thread.start()
-        logging.info("HTTP redirect server started on port 80")
-    except PermissionError:
-        logging.warning("Could not start HTTP redirect server on port 80 (requires root)")
-        logging.info("Run 'sudo python3 http_redirect_server.py' separately, or use iptables redirect")
+        # Give it a moment to start or fail
+        time.sleep(0.1)
+        logging.info("HTTP redirect server started on port 80 (or skipped if permission denied)")
     except Exception as e:
-        logging.warning(f"Could not start HTTP redirect server on port 80: {e}")
-        logging.info("You may need to run 'sudo python3 http_redirect_server.py' separately")
+        if "Permission denied" in str(e) or "port 80" in str(e).lower():
+            logging.info("HTTP redirect server skipped (requires sudo for port 80)")
+            logging.info("For full WiFi portal support, run: sudo python3 app.py")
+        else:
+            logging.debug(f"HTTP redirect server not started: {e}")
     
     # Start Flask app
     logging.info("Starting Flask server on http://0.0.0.0:5000")

@@ -4,9 +4,16 @@ Handles coin slot integration via GPIO on Raspberry Pi
 """
 
 import logging
-import RPi.GPIO as GPIO
 import time
 import threading
+
+# Try to import RPi.GPIO (only available on Raspberry Pi)
+try:
+    import RPi.GPIO as GPIO
+    GPIO_AVAILABLE = True
+except (ImportError, RuntimeError):
+    GPIO_AVAILABLE = False
+    GPIO = None
 
 class PaymentSystem:
     def __init__(self, coin_slot_pin=18):
@@ -26,6 +33,13 @@ class PaymentSystem:
     
     def initialize(self):
         """Initialize GPIO for coin slot"""
+        # Check if GPIO is available
+        if not GPIO_AVAILABLE:
+            logging.info("Running in development mode - GPIO hardware not available")
+            logging.info("Payment system will use manual/test coin insertion via web interface")
+            self.initialized = False
+            return
+        
         try:
             GPIO.setmode(GPIO.BCM)
             GPIO.setup(self.coin_slot_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
@@ -33,10 +47,20 @@ class PaymentSystem:
                                  callback=self._coin_pulse_callback, 
                                  bouncetime=50)
             self.initialized = True
-            logging.info("Payment system initialized")
+            logging.info("Payment system initialized - GPIO coin slot ready")
+        except RuntimeError as e:
+            # RuntimeError typically means not on Raspberry Pi or GPIO not available
+            if "Cannot determine SOC peripheral base address" in str(e):
+                logging.info("GPIO hardware not detected (not running on Raspberry Pi)")
+                logging.info("Payment system will use manual/test coin insertion only")
+            else:
+                logging.warning(f"GPIO initialization failed: {str(e)}")
+                logging.info("Payment system will use manual/test coin insertion only")
+            self.initialized = False
         except Exception as e:
-            logging.error(f"Error initializing payment system: {str(e)}")
-            # Fallback for non-Raspberry Pi systems
+            logging.warning(f"Payment system GPIO initialization failed: {str(e)}")
+            logging.info("Payment system will use manual/test coin insertion only")
+            # Fallback for non-Raspberry Pi systems or when GPIO is unavailable
             self.initialized = False
     
     def _coin_pulse_callback(self, channel):
@@ -121,4 +145,3 @@ class PaymentSystem:
                 GPIO.cleanup()
             except Exception as e:
                 logging.error(f"Error cleaning up payment system: {str(e)}")
-
