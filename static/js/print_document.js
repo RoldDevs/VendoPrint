@@ -6,16 +6,69 @@ let currentCost = 0;
 let paidAmount = 0;
 let paymentCheckInterval = null;
 
-// File upload
-document.getElementById('uploadArea').addEventListener('click', () => {
-    document.getElementById('fileInput').click();
-});
-
-document.getElementById('fileInput').addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+// Wait for DOM to be fully loaded before attaching event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // File upload
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
     
-    await uploadFile(file);
+    if (uploadArea && fileInput) {
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+        
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            await uploadFile(file);
+        });
+    } else {
+        console.error('Upload area or file input not found!');
+    }
+    
+    // Page range selection
+    const pageRange = document.getElementById('pageRange');
+    if (pageRange) {
+        pageRange.addEventListener('change', (e) => {
+            const customRangeGroup = document.getElementById('customRangeGroup');
+            if (e.target.value === 'custom') {
+                customRangeGroup.style.display = 'block';
+            } else {
+                customRangeGroup.style.display = 'none';
+            }
+            calculateCost();
+        });
+    }
+
+    // Calculate cost when settings change
+    const copies = document.getElementById('copies');
+    const startPage = document.getElementById('startPage');
+    const endPage = document.getElementById('endPage');
+    const orientation = document.getElementById('orientation');
+    const colorMode = document.getElementById('colorMode');
+    const printBtn = document.getElementById('printBtn');
+    
+    if (copies) copies.addEventListener('change', calculateCost);
+    if (startPage) startPage.addEventListener('change', calculateCost);
+    if (endPage) endPage.addEventListener('change', calculateCost);
+    if (orientation) orientation.addEventListener('change', calculateCost);
+    if (colorMode) colorMode.addEventListener('change', calculateCost);
+    
+    // Print button
+    if (printBtn) {
+        printBtn.addEventListener('click', async () => {
+            if (paidAmount < currentCost) {
+                alert('Please insert more coins');
+                return;
+            }
+            
+            // Disable button immediately to prevent double-clicks
+            printBtn.disabled = true;
+            
+            await startPrinting();
+        });
+    }
 });
 
 async function uploadFile(file) {
@@ -58,24 +111,6 @@ async function uploadFile(file) {
         alert('Error uploading file');
     }
 }
-
-// Page range selection
-document.getElementById('pageRange').addEventListener('change', (e) => {
-    const customRangeGroup = document.getElementById('customRangeGroup');
-    if (e.target.value === 'custom') {
-        customRangeGroup.style.display = 'block';
-    } else {
-        customRangeGroup.style.display = 'none';
-    }
-    calculateCost();
-});
-
-// Calculate cost when settings change
-document.getElementById('copies').addEventListener('change', calculateCost);
-document.getElementById('startPage').addEventListener('change', calculateCost);
-document.getElementById('endPage').addEventListener('change', calculateCost);
-document.getElementById('orientation').addEventListener('change', calculateCost);
-document.getElementById('colorMode').addEventListener('change', calculateCost);
 
 async function calculateCost() {
     const copies = parseInt(document.getElementById('copies').value) || 1;
@@ -156,18 +191,6 @@ function updatePaymentUI() {
     document.getElementById('printBtn').disabled = !canPrint;
 }
 
-// Print button
-document.getElementById('printBtn').addEventListener('click', async () => {
-    if (paidAmount < currentCost) {
-        alert('Please insert more coins');
-        return;
-    }
-    
-    // Disable button immediately to prevent double-clicks
-    document.getElementById('printBtn').disabled = true;
-    
-    await startPrinting();
-});
 
 async function startPrinting() {
     try {
