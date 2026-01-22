@@ -1,5 +1,7 @@
 // Print Document JavaScript
 
+console.log('[Print Document] Script loaded');
+
 let currentFile = null;
 let currentPages = 0;
 let currentCost = 0;
@@ -8,23 +10,41 @@ let paymentCheckInterval = null;
 
 // Wait for DOM to be fully loaded before attaching event listeners
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('[Print Document] DOM Content Loaded');
+    
     // File upload
     const uploadArea = document.getElementById('uploadArea');
     const fileInput = document.getElementById('fileInput');
     
+    console.log('[Print Document] Upload Area:', uploadArea);
+    console.log('[Print Document] File Input:', fileInput);
+    
     if (uploadArea && fileInput) {
-        uploadArea.addEventListener('click', () => {
+        console.log('[Print Document] Attaching click event to upload area');
+        
+        uploadArea.addEventListener('click', function(event) {
+            console.log('[Print Document] Upload area clicked!');
+            event.preventDefault();
             fileInput.click();
         });
         
         fileInput.addEventListener('change', async (e) => {
+            console.log('[Print Document] File selected');
             const file = e.target.files[0];
-            if (!file) return;
+            if (!file) {
+                console.log('[Print Document] No file selected');
+                return;
+            }
             
+            console.log('[Print Document] Uploading file:', file.name);
             await uploadFile(file);
         });
+        
+        console.log('[Print Document] Event listeners attached successfully');
     } else {
-        console.error('Upload area or file input not found!');
+        console.error('[Print Document] ERROR: Upload area or file input not found!');
+        console.error('[Print Document] uploadArea:', uploadArea);
+        console.error('[Print Document] fileInput:', fileInput);
     }
     
     // Page range selection
@@ -159,9 +179,10 @@ async function calculateCost() {
 }
 
 function startPaymentMonitoring() {
-    // Check payment status every second
+    // Check payment status and pending coins every second
     paymentCheckInterval = setInterval(async () => {
         try {
+            // Check payment status
             const response = await fetch('/api/payment-status');
             const data = await response.json();
             
@@ -171,12 +192,61 @@ function startPaymentMonitoring() {
             // Enable print button ONLY if enough is paid AND cost is set
             const canPrint = data.can_print && currentCost > 0 && paidAmount >= currentCost;
             document.getElementById('printBtn').disabled = !canPrint;
+            
+            // Check for pending coins from physical coin slot
+            await checkPendingCoin();
         } catch (error) {
             console.error('Payment status error:', error);
             // On error, disable print button for safety
             document.getElementById('printBtn').disabled = true;
         }
     }, 1000);
+}
+
+async function checkPendingCoin() {
+    try {
+        const response = await fetch('/api/pending-coin');
+        const data = await response.json();
+        
+        // Get all coin buttons
+        const coinButtons = document.querySelectorAll('[onclick^="testCoinInsert"]');
+        
+        if (data.has_pending && data.pending_coin) {
+            const pendingValue = data.pending_coin;
+            console.log(`[Print Document] Physical coin detected: P${pendingValue}`);
+            
+            // Enable only the matching button, disable others
+            coinButtons.forEach(btn => {
+                const match = btn.onclick.toString().match(/testCoinInsert\((\d+)\)/);
+                if (match) {
+                    const buttonValue = parseInt(match[1]);
+                    if (buttonValue === pendingValue) {
+                        btn.disabled = false;
+                        btn.style.background = '#FFA500'; // Orange to indicate ready
+                        btn.style.fontWeight = 'bold';
+                        btn.textContent = `Confirm P${buttonValue}`;
+                    } else {
+                        btn.disabled = true;
+                        btn.style.background = '#ccc';
+                        btn.textContent = `Test P${buttonValue}`;
+                    }
+                }
+            });
+        } else {
+            // No pending coin - disable all buttons (wait for physical coin)
+            coinButtons.forEach(btn => {
+                const match = btn.onclick.toString().match(/testCoinInsert\((\d+)\)/);
+                if (match) {
+                    const buttonValue = parseInt(match[1]);
+                    btn.disabled = true;
+                    btn.style.background = '#ccc';
+                    btn.textContent = `Test P${buttonValue}`;
+                }
+            });
+        }
+    } catch (error) {
+        console.error('[Print Document] Error checking pending coin:', error);
+    }
 }
 
 function updatePaymentUI() {

@@ -135,14 +135,20 @@ def upload_file():
     """Handle file upload"""
     global current_job
     try:
+        logging.info("File upload request received")
+        
         if 'file' not in request.files:
-            return jsonify({'error': 'No file provided'}), 400
+            logging.warning("No file in upload request")
+            return jsonify({'success': False, 'error': 'No file provided'}), 400
         
         file = request.files['file']
         file_type = request.form.get('file_type', 'document')
         
+        logging.info(f"Upload - Filename: {file.filename}, Type: {file_type}")
+        
         if file.filename == '':
-            return jsonify({'error': 'No file selected'}), 400
+            logging.warning("Empty filename in upload request")
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
         
         if file and allowed_file(file.filename):
             filename = secure_filename(file.filename)
@@ -151,6 +157,8 @@ def upload_file():
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(file_path)
             
+            logging.info(f"File saved: {file_path}")
+            
             # Process file to get page count and preview
             if file_type == 'photo':
                 pages = 1
@@ -158,6 +166,8 @@ def upload_file():
             else:
                 pages = file_processor.count_pages(file_path)
                 preview_path = file_processor.create_document_preview(file_path)
+            
+            logging.info(f"File processed - Pages: {pages}, Preview: {preview_path}")
             
             # Store in session
             session['current_file'] = file_path
@@ -177,12 +187,16 @@ def upload_file():
                 'paid': 0.0,
                 'status': 'uploaded',
                 'current_page': 0,
-                'total_pages': 0
+                'total_pages': 0,
+                'pending_coin': None,
+                'pending_coin_time': 0
             }
             
             # Also reset payment system if it exists
             if payment_system:
                 payment_system.reset()
+            
+            logging.info(f"Upload successful - Job initialized with {pages} page(s)")
             
             return jsonify({
                 'success': True,
@@ -190,13 +204,14 @@ def upload_file():
                 'preview_path': preview_path,
                 'pages': pages,
                 'file_type': file_type
-            })
+            }), 200
         
-        return jsonify({'error': 'Invalid file type'}), 400
+        logging.warning(f"Invalid file type: {file.filename}")
+        return jsonify({'success': False, 'error': 'Invalid file type'}), 400
     
     except Exception as e:
-        logging.error(f"Upload error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logging.error(f"Upload error: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/preview')
 def get_preview():
@@ -211,11 +226,22 @@ def calculate_cost():
     """Calculate printing cost based on settings"""
     global current_job
     try:
-        data = request.json
-        pages = data.get('pages', current_job['pages'])
+        # Check if request has JSON content
+        if not request.is_json:
+            logging.error("Calculate cost request is not JSON")
+            return jsonify({'success': False, 'error': 'Request must be JSON'}), 400
+        
+        data = request.get_json()
+        if data is None:
+            logging.error("Failed to parse JSON data in calculate cost request")
+            return jsonify({'success': False, 'error': 'Invalid JSON data'}), 400
+        
+        pages = data.get('pages', current_job.get('pages', 1))
         copies = data.get('copies', 1)
         color_mode = data.get('color_mode', 'grayscale')
         page_range = data.get('page_range', None)
+        
+        logging.info(f"Calculating cost - Pages: {pages}, Copies: {copies}, Color: {color_mode}, Range: {page_range}")
         
         # Calculate actual pages to print
         if page_range and page_range != 'all':
@@ -236,16 +262,22 @@ def calculate_cost():
         current_job['color_mode'] = color_mode
         current_job['cost'] = total_cost
         
+        # Initialize paid amount if not set
+        if 'paid' not in current_job:
+            current_job['paid'] = 0.0
+        
+        logging.info(f"Cost calculated: P{total_cost:.2f} ({actual_pages} pages x P{price_per_page:.2f})")
+        
         return jsonify({
             'success': True,
             'cost': total_cost,
             'pages': actual_pages,
             'price_per_page': price_per_page
-        })
+        }), 200
     
     except Exception as e:
-        logging.error(f"Cost calculation error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logging.error(f"Cost calculation error: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/payment-status', methods=['GET'])
 def payment_status():
@@ -266,38 +298,101 @@ def payment_status():
         'can_print': can_print
     })
 
-@app.route('/api/coin-inserted', methods=['POST'])
-def coin_inserted():
-    """Handle coin insertion from coin slot (manual/test endpoint)"""
+@app.route('/api/pending-coin', methods=['GET'])
+def get_pending_coin():
+    """Check if there's a pending coin from the physical coin slot"""
     global current_job
     try:
-        # Validate that a file is uploaded and cost is set
-        if not current_job.get('file_path') or current_job.get('cost', 0) <= 0:
-            return jsonify({'error': 'Please upload a file first and ensure cost is calculated'}), 400
+        pending_coin = current_job.get('pending_coin')
+        pending_time = current_job.get('pending_coin_time', 0)
         
+        # Clear pending coin if it's older than 30 seconds
+        if pending_coin and (time.time() - pending_time) > 30:
+            logging.info(f"Pending coin P{pending_coin} expired after 30 seconds")
+            current_job['pending_coin'] = None
+            pending_coin = None
+        
+        return jsonify({
+            'pending_coin': pending_coin,
+            'has_pending': pending_coin is not None
+        }), 200
+    except Exception as e:
+        logging.error(f"Error checking pending coin: {str(e)}")
+        return jsonify({'pending_coin': None, 'has_pending': False}), 200
+
+@app.route('/api/coin-inserted', methods=['POST'])
+def coin_inserted():
+    """Handle coin confirmation from web (after physical coin detected)"""
+    global current_job
+    try:
+        # Check if request has JSON content
+        if not request.is_json:
+            logging.error("Coin insertion request is not JSON")
+            return jsonify({'success': False, 'error': 'Request must be JSON'}), 400
+        
+        data = request.get_json()
+        if data is None:
+            logging.error("Failed to parse JSON data in coin insertion request")
+            return jsonify({'success': False, 'error': 'Invalid JSON data'}), 400
+        
+        # Validate that a file is uploaded
+        if not current_job.get('file_path'):
+            logging.warning("Coin confirmation attempted but no file uploaded")
+            return jsonify({'success': False, 'error': 'Please upload a file first'}), 400
+        
+        # Validate that cost is calculated
+        if current_job.get('cost', 0) <= 0:
+            logging.warning("Coin confirmation attempted but cost not calculated")
+            return jsonify({'success': False, 'error': 'Cost not calculated. Please wait.'}), 400
+        
+        # Validate job status
         if current_job.get('status') != 'uploaded':
-            return jsonify({'error': 'Cannot accept coins at this time'}), 400
+            logging.warning(f"Coin confirmation attempted but status is {current_job.get('status')}")
+            return jsonify({'success': False, 'error': 'Cannot accept coins at this time'}), 400
         
-        data = request.json or {}
-        coin_value = float(data.get('value', 0))
+        # Parse coin value from request
+        try:
+            requested_value = float(data.get('value', 0))
+        except (ValueError, TypeError) as e:
+            logging.error(f"Invalid coin value format: {data.get('value')}")
+            return jsonify({'success': False, 'error': 'Invalid coin value format'}), 400
         
-        if coin_value <= 0:
-            return jsonify({'error': 'Invalid coin value'}), 400
+        # Check if there's a pending coin from the physical slot
+        pending_coin = current_job.get('pending_coin')
         
-        # Accept any positive value (for testing), but prefer configured values
+        if pending_coin:
+            # Verify the requested value matches the pending coin
+            if requested_value != pending_coin:
+                logging.warning(f"Coin mismatch: Requested P{requested_value} but pending is P{pending_coin}")
+                return jsonify({'success': False, 'error': f'Please confirm the detected coin value: P{pending_coin}'}), 400
+            
+            # Clear the pending coin
+            current_job['pending_coin'] = None
+            coin_value = pending_coin
+            logging.info(f"Physical coin confirmed: P{coin_value}")
+        else:
+            # No pending coin - this is a manual/test insertion
+            # Allow for development/testing purposes
+            if requested_value <= 0:
+                logging.error(f"Invalid coin value: {requested_value}")
+                return jsonify({'success': False, 'error': 'Invalid coin value'}), 400
+            
+            coin_value = requested_value
+            logging.info(f"Manual coin insertion (test mode): P{coin_value}")
+        
+        # Accept any positive value (for testing), but log if not in configured values
         if coin_value not in CONFIG.get('COIN_VALUES', [1, 5, 10, 20]):
             logging.warning(f"Coin value {coin_value} not in configured values, accepting anyway")
         
+        # Initialize paid amount if not set
+        if 'paid' not in current_job:
+            current_job['paid'] = 0.0
+        
+        # Add payment
         current_job['paid'] += coin_value
         
         # Log payment
         logging_system.log_payment(coin_value, current_job['paid'], current_job['cost'])
-        
-        # Play coin sound
-        try:
-            audio_feedback.play_coin_sound()
-        except:
-            pass  # Audio is optional
         
         # Only allow printing if fully paid
         can_print = (
@@ -306,22 +401,23 @@ def coin_inserted():
             current_job['status'] == 'uploaded'
         )
         
-        logging.info(f"Manual coin insertion: ₱{coin_value}, Total: ₱{current_job['paid']}, Cost: ₱{current_job['cost']}")
+        logging.info(f"Payment processed: P{coin_value:.2f}, Total: P{current_job['paid']:.2f}, Required: P{current_job['cost']:.2f}, Can print: {can_print}")
         
         return jsonify({
             'success': True,
             'paid': current_job['paid'],
             'cost': current_job['cost'],
+            'required': current_job['cost'],
             'remaining': max(0, current_job['cost'] - current_job['paid']),
             'can_print': can_print
-        })
+        }), 200
     
     except ValueError as e:
         logging.error(f"Invalid coin value: {str(e)}")
-        return jsonify({'error': 'Invalid coin value provided'}), 400
+        return jsonify({'success': False, 'error': 'Invalid coin value provided'}), 400
     except Exception as e:
-        logging.error(f"Coin insertion error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logging.error(f"Coin confirmation error: {str(e)}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/start-print', methods=['POST'])
 def start_print():
@@ -464,19 +560,22 @@ def print_job_thread(job):
         error_handler.handle_error(str(e))
 
 def coin_inserted_callback(coin_value):
-    """Callback function for coin slot - updates payment"""
+    """Callback function for coin slot - stores pending coin for web confirmation"""
     global current_job
     try:
-        # Accept coins in any state (uploaded, idle, or even during printing for refunds)
-        current_job['paid'] += coin_value
-        logging_system.log_payment(coin_value, current_job['paid'], current_job['cost'])
+        # Store the detected coin as pending (waiting for web confirmation)
+        if 'pending_coin' not in current_job:
+            current_job['pending_coin'] = None
+        
+        current_job['pending_coin'] = coin_value
+        current_job['pending_coin_time'] = time.time()
         
         try:
             audio_feedback.play_coin_sound()
         except:
             pass  # Audio is optional
         
-        logging.info(f"Coin inserted via GPIO: ₱{coin_value}, Total paid: ₱{current_job['paid']}, Cost: ₱{current_job['cost']}")
+        logging.info(f"Physical coin detected via GPIO: P{coin_value} - Waiting for web confirmation")
     except Exception as e:
         logging.error(f"Error in coin_inserted_callback: {e}")
 
