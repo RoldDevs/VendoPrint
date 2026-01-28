@@ -172,39 +172,47 @@ async function checkPendingCoin() {
         
         if (data.has_pending && data.pending_coin) {
             const pendingValue = data.pending_coin;
-            console.log(`[Print Photo] Physical coin detected: P${pendingValue}`);
+            console.log(`[Print Photo] Physical coin detected: ₱${pendingValue}`);
             
-            // Enable only the matching button, disable others
+            // Highlight the matching button to confirm hardware coin
             coinButtons.forEach(btn => {
                 const match = btn.onclick.toString().match(/testCoinInsert\((\d+)\)/);
                 if (match) {
                     const buttonValue = parseInt(match[1]);
                     if (buttonValue === pendingValue) {
                         btn.disabled = false;
-                        btn.style.background = '#FFA500'; // Orange to indicate ready
+                        btn.style.background = '#FFA500'; // Orange to indicate hardware coin detected
                         btn.style.fontWeight = 'bold';
-                        btn.textContent = `Confirm P${buttonValue}`;
+                        btn.textContent = `✓ Confirm ₱${buttonValue} COIN`;
                     } else {
-                        btn.disabled = true;
-                        btn.style.background = '#ccc';
-                        btn.textContent = `Test P${buttonValue}`;
+                        btn.disabled = false;
+                        btn.style.background = '#4CAF50';
+                        btn.style.fontWeight = 'normal';
+                        btn.textContent = `Test ₱${buttonValue}`;
                     }
                 }
             });
         } else {
-            // No pending coin - disable all buttons (wait for physical coin)
+            // No pending coin - all buttons available for manual testing
             coinButtons.forEach(btn => {
                 const match = btn.onclick.toString().match(/testCoinInsert\((\d+)\)/);
                 if (match) {
                     const buttonValue = parseInt(match[1]);
-                    btn.disabled = true;
-                    btn.style.background = '#ccc';
-                    btn.textContent = `Test P${buttonValue}`;
+                    btn.disabled = false;
+                    btn.style.background = '#4CAF50';
+                    btn.style.fontWeight = 'normal';
+                    btn.textContent = `Test ₱${buttonValue}`;
                 }
             });
         }
     } catch (error) {
         console.error('[Print Photo] Error checking pending coin:', error);
+        // On error, enable all buttons for testing
+        const coinButtons = document.querySelectorAll('[onclick^="testCoinInsert"]');
+        coinButtons.forEach(btn => {
+            btn.disabled = false;
+            btn.style.background = '#4CAF50';
+        });
     }
 }
 

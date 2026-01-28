@@ -26,39 +26,49 @@ class PaymentSystem:
         }
         self.pulse_count = 0
         self.last_pulse_time = 0
-        self.pulse_timeout = 0.5  # 500ms timeout between pulses
+        self.pulse_timeout = 1.0  # 1 second timeout to allow for 20 pulses
         self.initialized = False
         self.callback = None
         self._timer = None
+        logging.info(f"PaymentSystem created with coin_slot_pin=GPIO{coin_slot_pin}")
     
     def initialize(self):
         """Initialize GPIO for coin slot"""
+        logging.info(f"Initializing payment system on GPIO pin {self.coin_slot_pin}...")
+        
         # Check if GPIO is available
         if not GPIO_AVAILABLE:
-            logging.info("Running in development mode - GPIO hardware not available")
+            logging.warning("RPi.GPIO module not available - GPIO hardware not accessible")
             logging.info("Payment system will use manual/test coin insertion via web interface")
             self.initialized = False
             return
         
         try:
+            logging.info(f"Setting up GPIO pin {self.coin_slot_pin} (BCM mode)")
             GPIO.setmode(GPIO.BCM)
             GPIO.setup(self.coin_slot_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+            logging.info(f"GPIO pin {self.coin_slot_pin} configured as INPUT with PULL_UP")
+            
             GPIO.add_event_detect(self.coin_slot_pin, GPIO.FALLING, 
                                  callback=self._coin_pulse_callback, 
                                  bouncetime=50)
+            logging.info(f"Event detection enabled on GPIO{self.coin_slot_pin} (FALLING edge, 50ms bounce time)")
+            
             self.initialized = True
-            logging.info("Payment system initialized - GPIO coin slot ready")
+            logging.info("✓ Payment system initialized successfully - Coin slot ready on GPIO18 (Physical Pin 12)")
+            logging.info("✓ Coin selector model: 1238A-PRO UNIVERSAL")
+            logging.info("✓ Pulse pattern: 1₱=1 pulse, 5₱=5 pulses, 10₱=10 pulses, 20₱=20 pulses")
         except RuntimeError as e:
             # RuntimeError typically means not on Raspberry Pi or GPIO not available
             if "Cannot determine SOC peripheral base address" in str(e):
-                logging.info("GPIO hardware not detected (not running on Raspberry Pi)")
+                logging.warning("GPIO hardware not detected (not running on Raspberry Pi)")
                 logging.info("Payment system will use manual/test coin insertion only")
             else:
-                logging.warning(f"GPIO initialization failed: {str(e)}")
+                logging.error(f"GPIO initialization failed: {str(e)}")
                 logging.info("Payment system will use manual/test coin insertion only")
             self.initialized = False
         except Exception as e:
-            logging.warning(f"Payment system GPIO initialization failed: {str(e)}")
+            logging.error(f"Payment system GPIO initialization failed: {str(e)}")
             logging.info("Payment system will use manual/test coin insertion only")
             # Fallback for non-Raspberry Pi systems or when GPIO is unavailable
             self.initialized = False
@@ -70,6 +80,7 @@ class PaymentSystem:
             
             # Debounce: ignore pulses too close together (less than 10ms)
             if current_time - self.last_pulse_time < 0.01:
+                logging.debug(f"Coin pulse ignored (debounce)")
                 return
             
             # If enough time has passed, process previous coin
@@ -78,16 +89,18 @@ class PaymentSystem:
                 if self.pulse_count > 0:
                     coin_value = self._determine_coin_value()
                     if coin_value > 0 and self.callback:
-                        logging.info(f"Coin detected: {self.pulse_count} pulses = ₱{coin_value}")
+                        logging.info(f"[GPIO] Coin sequence completed: {self.pulse_count} pulses = ₱{coin_value}")
                         try:
                             self.callback(coin_value)
                         except Exception as e:
                             logging.error(f"Error in coin callback: {e}")
                 # Reset for new coin
                 self.pulse_count = 1
+                logging.debug(f"[GPIO] New coin sequence started (pulse #1)")
             else:
                 # Continuation of same coin
                 self.pulse_count += 1
+                logging.debug(f"[GPIO] Coin pulse #{self.pulse_count}")
             
             self.last_pulse_time = current_time
             
@@ -104,29 +117,40 @@ class PaymentSystem:
         try:
             if self.pulse_count > 0:
                 coin_value = self._determine_coin_value()
-                if coin_value > 0 and self.callback:
-                    logging.info(f"Processing coin: {self.pulse_count} pulses = ₱{coin_value}")
-                    try:
-                        self.callback(coin_value)
-                    except Exception as e:
-                        logging.error(f"Error in coin callback: {e}")
+                logging.info(f"[GPIO] Processing coin: {self.pulse_count} pulses detected")
+                if coin_value > 0:
+                    logging.info(f"[GPIO] Coin identified as ₱{coin_value}")
+                    if self.callback:
+                        try:
+                            self.callback(coin_value)
+                            logging.info(f"[GPIO] Coin callback executed successfully")
+                        except Exception as e:
+                            logging.error(f"Error in coin callback: {e}")
+                    else:
+                        logging.warning(f"[GPIO] No callback registered! Coin value: ₱{coin_value}")
+                else:
+                    logging.warning(f"[GPIO] Invalid coin - {self.pulse_count} pulses did not match any known coin")
                 self.pulse_count = 0
         except Exception as e:
             logging.error(f"Error processing coin: {e}")
     
     def _determine_coin_value(self):
         """Determine coin value from pulse pattern"""
-        # Simplified: assumes different pulse patterns for different coins
-        # Actual implementation should match your coin slot's protocol
+        # 1238A-PRO UNIVERSAL Coin Selector pulse pattern
+        # This model outputs pulses equal to the coin value
+        # 1 peso = 1 pulse, 5 pesos = 5 pulses, 10 pesos = 10 pulses, 20 pesos = 20 pulses
         if self.pulse_count == 1:
             return 1.0  # 1 peso
-        elif self.pulse_count == 2:
+        elif self.pulse_count == 5:
             return 5.0  # 5 pesos
-        elif self.pulse_count == 3:
+        elif self.pulse_count == 10:
             return 10.0  # 10 pesos
-        elif self.pulse_count >= 4:
+        elif self.pulse_count == 20:
             return 20.0  # 20 pesos
-        return 0.0
+        else:
+            # If pulse count doesn't match known values, log it
+            logging.warning(f"Unknown pulse count: {self.pulse_count} - ignoring coin")
+            return 0.0
     
     def set_coin_callback(self, callback):
         """Set callback function for coin insertion"""
