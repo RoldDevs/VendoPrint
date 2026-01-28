@@ -320,6 +320,54 @@ def get_pending_coin():
         logging.error(f"Error checking pending coin: {str(e)}")
         return jsonify({'pending_coin': None, 'has_pending': False}), 200
 
+@app.route('/api/gpio-test', methods=['GET'])
+def gpio_test():
+    """Test GPIO status and coin slot detection"""
+    try:
+        status = {
+            'gpio_available': payment_system is not None,
+            'initialized': payment_system.initialized if payment_system else False,
+            'pin': payment_system.coin_slot_pin if payment_system else None,
+            'callback_set': payment_system.callback is not None if payment_system else False,
+            'pulse_count': payment_system.pulse_count if payment_system else 0,
+            'test_mode': payment_system.test_mode if payment_system else False
+        }
+        
+        # Try to read GPIO state if initialized
+        if payment_system and payment_system.initialized:
+            try:
+                import RPi.GPIO as GPIO
+                pin_state = GPIO.input(payment_system.coin_slot_pin)
+                status['pin_state'] = 'HIGH' if pin_state else 'LOW'
+            except Exception as e:
+                status['pin_state'] = f'Error: {str(e)}'
+        
+        logging.info(f"GPIO Test Status: {status}")
+        return jsonify(status), 200
+    except Exception as e:
+        logging.error(f"GPIO test error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/simulate-coin', methods=['POST'])
+def simulate_coin():
+    """Simulate a coin insertion for testing (bypasses GPIO)"""
+    global current_job
+    try:
+        data = request.get_json()
+        value = float(data.get('value', 5))
+        
+        logging.info(f"[TEST] Simulating coin insertion: ₱{value}")
+        
+        # Call the callback directly (simulates hardware detection)
+        if payment_system and payment_system.callback:
+            coin_inserted_callback(value)
+            return jsonify({'success': True, 'message': f'Simulated ₱{value} coin insertion'}), 200
+        else:
+            return jsonify({'success': False, 'error': 'Payment system not initialized'}), 400
+    except Exception as e:
+        logging.error(f"Simulate coin error: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/coin-inserted', methods=['POST'])
 def coin_inserted():
     """Handle coin confirmation from web (after physical coin detected)"""
@@ -563,6 +611,13 @@ def coin_inserted_callback(coin_value):
     """Callback function for coin slot - stores pending coin for web confirmation"""
     global current_job
     try:
+        logging.info("="*60)
+        logging.info(f"[CALLBACK] COIN CALLBACK TRIGGERED!")
+        logging.info(f"[CALLBACK] Coin value: ₱{coin_value}")
+        logging.info(f"[CALLBACK] Current job status: {current_job.get('status', 'unknown')}")
+        logging.info(f"[CALLBACK] File uploaded: {current_job.get('file_path') is not None}")
+        logging.info("="*60)
+        
         # Store the detected coin as pending (waiting for web confirmation)
         if 'pending_coin' not in current_job:
             current_job['pending_coin'] = None
@@ -570,14 +625,19 @@ def coin_inserted_callback(coin_value):
         current_job['pending_coin'] = coin_value
         current_job['pending_coin_time'] = time.time()
         
+        logging.info(f"[CALLBACK] ✓ Pending coin stored: ₱{coin_value}")
+        logging.info(f"[CALLBACK] ✓ Waiting for user to confirm via web interface...")
+        
         try:
             audio_feedback.play_coin_sound()
-        except:
-            pass  # Audio is optional
+            logging.info(f"[CALLBACK] ✓ Audio feedback played")
+        except Exception as audio_error:
+            logging.debug(f"[CALLBACK] Audio feedback not available: {audio_error}")
         
-        logging.info(f"Physical coin detected via GPIO: P{coin_value} - Waiting for web confirmation")
+        logging.info(f"[CALLBACK] ✓ Callback completed successfully")
+        
     except Exception as e:
-        logging.error(f"Error in coin_inserted_callback: {e}")
+        logging.error(f"[CALLBACK] ✗ Error in coin_inserted_callback: {e}", exc_info=True)
 
 def allowed_file(filename):
     """Check if file extension is allowed"""
@@ -588,7 +648,7 @@ if __name__ == '__main__':
     # Setup logging
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.FileHandler('logs/vendoprint.log'),
             logging.StreamHandler()
@@ -596,19 +656,38 @@ if __name__ == '__main__':
     )
     
     # Initialize systems
-    logging.info("Initializing VendoPrint system...")
+    logging.info("")
+    logging.info("="*70)
+    logging.info("VENDOPRINT SYSTEM STARTUP")
+    logging.info("="*70)
+    
+    # Initialize payment system
+    logging.info("")
+    logging.info("Step 1: Initializing Payment System...")
     payment_system.initialize()
+    
     if payment_system.initialized:
+        logging.info("")
+        logging.info("Step 2: Registering coin callback...")
         payment_system.set_coin_callback(coin_inserted_callback)
-        logging.info("Hardware coin slot enabled - coins will be detected automatically")
+        logging.info("✓ Hardware coin slot ENABLED - GPIO detection active")
+        logging.info("✓ Coins will be detected automatically from coin slot")
     else:
-        logging.info("Hardware coin slot not available - using manual/test coin insertion")
-        logging.info("Users can use test buttons (₱1, ₱5, ₱10, ₱20) in the interface")
+        logging.warning("⚠ Hardware coin slot NOT available")
+        logging.info("→ Using manual/test coin insertion mode")
+        logging.info("→ Users can use test buttons (₱1, ₱5, ₱10, ₱20) in the web interface")
+    
+    logging.info("")
+    logging.info("Step 3: Initializing printer...")
     printer_manager.initialize()
+    
+    logging.info("")
+    logging.info("Step 4: Initializing error handler...")
     error_handler.initialize()
     
     # Start HTTP redirect server on port 80 (in background thread)
-    # Note: This requires root privileges. If it fails, run separately with sudo
+    logging.info("")
+    logging.info("Step 5: Starting HTTP redirect server...")
     try:
         import sys
         import os
@@ -627,15 +706,31 @@ if __name__ == '__main__':
         redirect_thread.start()
         # Give it a moment to start or fail
         time.sleep(0.1)
-        logging.info("HTTP redirect server started on port 80 (or skipped if permission denied)")
+        logging.info("✓ HTTP redirect server started on port 80 (or skipped if permission denied)")
     except Exception as e:
         if "Permission denied" in str(e) or "port 80" in str(e).lower():
-            logging.info("HTTP redirect server skipped (requires sudo for port 80)")
-            logging.info("For full WiFi portal support, run: sudo python3 app.py")
+            logging.info("→ HTTP redirect server skipped (requires sudo for port 80)")
+            logging.info("→ For full WiFi portal support, run: sudo python3 app.py")
         else:
-            logging.debug(f"HTTP redirect server not started: {e}")
+            logging.debug(f"→ HTTP redirect server not started: {e}")
     
     # Start Flask app
-    logging.info("Starting Flask server on http://0.0.0.0:5000")
-    logging.info("Access the portal via WiFi connection or http://192.168.4.1:5000")
+    logging.info("")
+    logging.info("="*70)
+    logging.info("SYSTEM READY - Starting web server...")
+    logging.info("="*70)
+    logging.info("")
+    logging.info("→ Flask server: http://0.0.0.0:5000")
+    logging.info("→ WiFi portal: http://192.168.4.1:5000")
+    logging.info("")
+    if payment_system.initialized:
+        logging.info("→ Hardware coin detection: ACTIVE (GPIO18)")
+        logging.info("→ Insert a coin to test the system!")
+    else:
+        logging.info("→ Hardware coin detection: DISABLED")
+        logging.info("→ Use web interface test buttons instead")
+    logging.info("")
+    logging.info("="*70)
+    logging.info("")
+    
     app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
