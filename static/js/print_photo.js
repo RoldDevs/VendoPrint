@@ -19,14 +19,8 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('[Print Photo] Upload Area:', uploadArea);
     console.log('[Print Photo] File Input:', fileInput);
     
-    if (uploadArea && fileInput) {
-        console.log('[Print Photo] Attaching click event to upload area');
-        
-        uploadArea.addEventListener('click', function(event) {
-            console.log('[Print Photo] Upload area clicked!');
-            event.preventDefault();
-            fileInput.click();
-        });
+    if (fileInput) {
+        console.log('[Print Photo] Attaching change event to file input');
         
         fileInput.addEventListener('change', async (e) => {
             console.log('[Print Photo] File selected');
@@ -40,10 +34,9 @@ document.addEventListener('DOMContentLoaded', function() {
             await uploadFile(file);
         });
         
-        console.log('[Print Photo] Event listeners attached successfully');
+        console.log('[Print Photo] Event listener attached successfully');
     } else {
-        console.error('[Print Photo] ERROR: Upload area or file input not found!');
-        console.error('[Print Photo] uploadArea:', uploadArea);
+        console.error('[Print Photo] ERROR: File input not found!');
         console.error('[Print Photo] fileInput:', fileInput);
     }
     

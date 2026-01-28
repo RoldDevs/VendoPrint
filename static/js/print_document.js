@@ -19,14 +19,8 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('[Print Document] Upload Area:', uploadArea);
     console.log('[Print Document] File Input:', fileInput);
     
-    if (uploadArea && fileInput) {
-        console.log('[Print Document] Attaching click event to upload area');
-        
-        uploadArea.addEventListener('click', function(event) {
-            console.log('[Print Document] Upload area clicked!');
-            event.preventDefault();
-            fileInput.click();
-        });
+    if (fileInput) {
+        console.log('[Print Document] Attaching change event to file input');
         
         fileInput.addEventListener('change', async (e) => {
             console.log('[Print Document] File selected');
@@ -40,10 +34,9 @@ document.addEventListener('DOMContentLoaded', function() {
             await uploadFile(file);
         });
         
-        console.log('[Print Document] Event listeners attached successfully');
+        console.log('[Print Document] Event listener attached successfully');
     } else {
-        console.error('[Print Document] ERROR: Upload area or file input not found!');
-        console.error('[Print Document] uploadArea:', uploadArea);
+        console.error('[Print Document] ERROR: File input not found!');
         console.error('[Print Document] fileInput:', fileInput);
     }
     

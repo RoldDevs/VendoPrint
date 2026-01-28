@@ -14,11 +14,11 @@
         </div>
         
         <div class="upload-section">
-            <div class="upload-area" id="uploadArea">
-                <input type="file" id="fileInput" accept=".pdf,.doc,.docx" style="position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none;">
-                <div class="upload-icon">[UPLOAD]</div>
-                <p>Click to upload document</p>
-                <p class="hint">Supported: PDF, DOC, DOCX</p>
+            <div class="upload-area" id="uploadArea" style="position: relative;">
+                <input type="file" id="fileInput" accept=".pdf,.doc,.docx" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10;">
+                <div class="upload-icon" style="pointer-events: none;">[UPLOAD]</div>
+                <p style="pointer-events: none;">Click to upload document</p>
+                <p class="hint" style="pointer-events: none;">Supported: PDF, DOC, DOCX</p>
             </div>
         </div>
         
